@@ -106,21 +106,36 @@ io.on("connection", (socket) => {
     });
   });
 
-  // 🧍 PASSENGER COUNT UPDATES (removed passengerCount processing)
+  // 🧍 PASSENGER COUNT UPDATES (driver → users)
   socket.on("passengerUpdate", (data) => {
-    const { accountId, organizationName } = data;
-    console.log(`🧍 Passenger update received from driver ${accountId} (count ignored)`);
+    const { accountId, passengerCount, maxCapacity, organizationName } = data || {};
+    console.log(
+      `🧍 Passenger update from driver ${accountId} (${organizationName || "No Organization"}): ${passengerCount}/${maxCapacity}`
+    );
 
-    // Optionally refresh organization name only; do not store passenger counts
     if (accountId) {
+      const prev = drivers[accountId] || {};
+      const resolvedOrg = organizationName || prev.organizationName || "No Organization";
+      const resolvedMax = typeof maxCapacity === "number" ? maxCapacity : (prev.maxCapacity || 0);
+      const resolvedCount = typeof passengerCount === "number" ? passengerCount : (prev.passengerCount || 0);
+
       drivers[accountId] = {
-        ...drivers[accountId],
-        organizationName: organizationName || drivers[accountId]?.organizationName || "No Organization",
+        ...prev,
+        passengerCount: resolvedCount,
+        maxCapacity: resolvedMax,
+        organizationName: resolvedOrg,
         lastUpdated: new Date().toISOString(),
       };
-    }
 
-    // Do not broadcast passenger counts anymore
+      // Broadcast latest passenger count to all connected users
+      io.to("user").emit("passengerCountUpdate", {
+        accountId,
+        passengerCount: drivers[accountId].passengerCount,
+        maxCapacity: drivers[accountId].maxCapacity,
+        organizationName: drivers[accountId].organizationName,
+        from: "driver",
+      });
+    }
   });
 
   // 🎯 DESTINATION UPDATE (driver → users)
